@@ -59,12 +59,13 @@ export const analyzeSlideImage = async (base64Image: string): Promise<{ backgrou
           {
             text: `You are a Slide Restoration Expert. Your mission is to reconstruct this slide as an editable PPTX while perfectly preserving graphics and erasing text.
             
-            STRICT GRAPHIC INTEGRITY RULES:
-            1. COHESIVE ASSETS: Do NOT break icons or diagrams into fragments. If you see a funnel with circles around it, or a timeline with multiple nodes, capture the WHOLE group as a SINGLE 'image' element.
-            2. NO CROPPED TEXT: Ensure 'image' elements focus on graphics. If text is nearby, it's okay to include a bit of margin; we will use "Koutu" (background removal) to clean it up.
-            3. FULL OCR: Detect every text block. We will replace them with editable boxes.
-            4. BACKGROUND: Identify the background color accurately.
-            5. FONT SIZES: Be conservative. For Chinese text, use smaller pt sizes (e.g., 9pt for body, 24pt for titles) to ensure fit.
+            STRICT WATERMARK REMOVAL RULES:
+            1. REMOVE WATERMARKS: Explicitly ignore and EXCLUDE any text or logos that say "NotebookLM", especially in the bottom right corner. Do NOT create text boxes or image crops for these watermarks.
+            2. COHESIVE ASSETS: Do NOT break icons or diagrams into fragments. Capture the WHOLE graphic group as a SINGLE 'image' element.
+            3. NO CROPPED TEXT: Ensure 'image' elements focus on pure graphics. If text is nearby, capture the graphic as a clean sticker; we will use background-removal to clean the edges.
+            4. FULL OCR: Detect every relevant text block (excluding the watermark). We will replace them with editable boxes.
+            5. BACKGROUND: Identify the background color accurately.
+            6. FONT SIZES: Be conservative for Chinese text (9-11pt body, 24-28pt titles).
             
             Return a JSON with 'backgroundColor' and 'elements'.`,
           },

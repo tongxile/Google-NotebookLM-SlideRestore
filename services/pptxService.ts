@@ -77,7 +77,7 @@ export const generatePptx = async (slidesData: SlideData[]): Promise<Blob> => {
   for (const slideData of slidesData) {
     const slide = pptx.addSlide();
     
-    // Set Slide Background
+    // Set Slide Background (Effective Erasure Layer)
     const bgColorHex = slideData.backgroundColor || "#FFFFFF";
     const bgColorPptx = bgColorHex.replace("#", "");
     slide.background = { fill: bgColorPptx };
@@ -88,6 +88,13 @@ export const generatePptx = async (slidesData: SlideData[]): Promise<Blob> => {
 
     // 1. Render Graphics (Bottom Layer)
     for (const element of graphics) {
+      // SAFEGUARD: Ignore elements that look like the bottom-right watermark (NotebookLM logo)
+      // Usually located around X > 80% and Y > 90%
+      const isWatermarkArea = element.x > 75 && element.y > 88;
+      if (isWatermarkArea && (element.width < 25 && element.height < 12)) {
+        continue; // Skip potential NotebookLM watermark
+      }
+
       try {
         const processedImage = await cropAndProcessImage(
           slideData.thumbnail,
@@ -111,9 +118,14 @@ export const generatePptx = async (slidesData: SlideData[]): Promise<Blob> => {
 
     // 2. Render Text Boxes (Top Layer)
     for (const element of texts) {
+      // SAFEGUARD: Skip text elements identified as watermarks (e.g., contains "NotebookLM")
+      if (element.content.toLowerCase().includes("notebooklm")) {
+        continue;
+      }
+
       const { content, x, y, width, height, fontSize, fontColor, isBold, textAlign } = element as any;
       
-      // Precision font scaling for Chinese characters
+      // Precision font scaling for Chinese characters (0.75 for better fit)
       const refinedFontSize = typeof fontSize === 'number' ? Math.max(7, Math.round(fontSize * 0.75)) : 11;
       
       slide.addText(content, {
@@ -130,7 +142,7 @@ export const generatePptx = async (slidesData: SlideData[]): Promise<Blob> => {
         margin: 0,
         wrap: true,
         autoFit: false,
-        // The text box background is solid to MASK the original image text underneath
+        // The text box background matches the slide background to mask the original image underneath
         fill: { color: bgColorPptx }, 
         line: { color: bgColorPptx, transparency: 100 },
       });
