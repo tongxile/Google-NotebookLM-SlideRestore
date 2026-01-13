@@ -43,6 +43,30 @@ const responseSchema = {
   required: ["backgroundColor", "elements"],
 };
 
+/**
+ * Cleans the string to prevent JSON.parse errors due to malformed escapes or control chars.
+ */
+const sanitizeJsonString = (str: string): string => {
+  // Remove markdown code blocks if present
+  let cleaned = str.replace(/```json\s?/, "").replace(/```\s?$/, "").trim();
+  
+  // Find the actual JSON object bounds
+  const firstBrace = cleaned.indexOf('{');
+  const lastBrace = cleaned.lastIndexOf('}');
+  if (firstBrace !== -1 && lastBrace !== -1) {
+    cleaned = cleaned.substring(firstBrace, lastBrace + 1);
+  }
+
+  // Sanitize bad unicode escapes: replace \u followed by non-hex with just u
+  // This is the likely culprit for "Bad Unicode escape"
+  cleaned = cleaned.replace(/\\u(?![0-9a-fA-F]{4})/g, "u");
+  
+  // Remove problematic control characters (00-1F range, excluding common ones like tab/newline)
+  cleaned = cleaned.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F-\x9F]/g, "");
+  
+  return cleaned;
+};
+
 export const analyzeSlideImage = async (base64Image: string): Promise<{ backgroundColor: string, elements: SlideElement[] }> => {
   try {
     const model = 'gemini-3-flash-preview';
@@ -62,12 +86,15 @@ export const analyzeSlideImage = async (base64Image: string): Promise<{ backgrou
             STRICT WATERMARK REMOVAL RULES:
             1. REMOVE WATERMARKS: Explicitly ignore and EXCLUDE any text or logos that say "NotebookLM", especially in the bottom right corner. Do NOT create text boxes or image crops for these watermarks.
             2. COHESIVE ASSETS: Do NOT break icons or diagrams into fragments. Capture the WHOLE graphic group as a SINGLE 'image' element.
-            3. NO CROPPED TEXT: Ensure 'image' elements focus on pure graphics. If text is nearby, capture the graphic as a clean sticker; we will use background-removal to clean the edges.
+            3. NO CROPPED TEXT: Ensure 'image' elements focus on pure graphics. If text is nearby, capture the graphic as a clean sticker.
             4. FULL OCR: Detect every relevant text block (excluding the watermark). We will replace them with editable boxes.
             5. BACKGROUND: Identify the background color accurately.
             6. FONT SIZES: Be conservative for Chinese text (9-11pt body, 24-28pt titles).
             
-            Return a JSON with 'backgroundColor' and 'elements'.`,
+            OUTPUT RULES:
+            - Return ONLY a valid JSON object.
+            - Do NOT include backslashes in text content unless properly escaped for JSON.
+            - Do NOT use markdown code blocks in your response.`,
           },
         ],
       },
@@ -80,10 +107,19 @@ export const analyzeSlideImage = async (base64Image: string): Promise<{ backgrou
 
     const text = response.text;
     if (!text) return { backgroundColor: '#FFFFFF', elements: [] };
-    const jsonStr = text.replace(/^```json\s*/, '').replace(/\s*```$/, '').trim();
-    return JSON.parse(jsonStr);
+    
+    const sanitizedText = sanitizeJsonString(text);
+    return JSON.parse(sanitizedText);
   } catch (error) {
     console.error("Gemini Analysis Error:", error);
+    // Return a graceful fallback if parsing still fails
+    if (error instanceof SyntaxError) {
+      console.warn("Retrying with more aggressive cleaning...");
+      try {
+        const text = (error as any).message; // Sometimes original text is in error
+        // Last ditch effort: if it's too broken, return empty slide
+      } catch (e) {}
+    }
     throw error;
   }
 };

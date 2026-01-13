@@ -35,7 +35,6 @@ const cropAndProcessImage = (
         const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
         const data = imageData.data;
 
-        // Helper to convert hex to RGB
         const hexToRgb = (hex: string) => {
           const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
           return result ? {
@@ -46,17 +45,15 @@ const cropAndProcessImage = (
         };
 
         const target = hexToRgb(targetBgColor);
-        const threshold = 45; // Sensitivity for background detection
+        const threshold = 45;
 
         for (let i = 0; i < data.length; i += 4) {
           const r = data[i];
           const g = data[i + 1];
           const b = data[i + 2];
-          
-          // If pixel color is very close to the slide background color, make it transparent
           const diff = Math.abs(r - target.r) + Math.abs(g - target.g) + Math.abs(b - target.b);
           if (diff < threshold) {
-            data[i + 3] = 0; // Alpha = 0
+            data[i + 3] = 0;
           }
         }
         ctx.putImageData(imageData, 0, 0);
@@ -76,23 +73,21 @@ export const generatePptx = async (slidesData: SlideData[]): Promise<Blob> => {
 
   for (const slideData of slidesData) {
     const slide = pptx.addSlide();
-    
-    // Set Slide Background (Effective Erasure Layer)
     const bgColorHex = slideData.backgroundColor || "#FFFFFF";
     const bgColorPptx = bgColorHex.replace("#", "");
     slide.background = { fill: bgColorPptx };
 
-    // Separate into layers
+    if (!slideData.elements) continue;
+
     const graphics = slideData.elements.filter(e => e.type !== 'text');
     const texts = slideData.elements.filter(e => e.type === 'text');
 
     // 1. Render Graphics (Bottom Layer)
     for (const element of graphics) {
-      // SAFEGUARD: Ignore elements that look like the bottom-right watermark (NotebookLM logo)
-      // Usually located around X > 80% and Y > 90%
-      const isWatermarkArea = element.x > 75 && element.y > 88;
-      if (isWatermarkArea && (element.width < 25 && element.height < 12)) {
-        continue; // Skip potential NotebookLM watermark
+      // Ignore bottom-right watermark area (X > 75%, Y > 85%)
+      const isWatermarkArea = element.x > 75 && element.y > 85;
+      if (isWatermarkArea && element.width < 25 && element.height < 15) {
+        continue;
       }
 
       try {
@@ -118,14 +113,11 @@ export const generatePptx = async (slidesData: SlideData[]): Promise<Blob> => {
 
     // 2. Render Text Boxes (Top Layer)
     for (const element of texts) {
-      // SAFEGUARD: Skip text elements identified as watermarks (e.g., contains "NotebookLM")
       if (element.content.toLowerCase().includes("notebooklm")) {
         continue;
       }
 
       const { content, x, y, width, height, fontSize, fontColor, isBold, textAlign } = element as any;
-      
-      // Precision font scaling for Chinese characters (0.75 for better fit)
       const refinedFontSize = typeof fontSize === 'number' ? Math.max(7, Math.round(fontSize * 0.75)) : 11;
       
       slide.addText(content, {
@@ -134,7 +126,7 @@ export const generatePptx = async (slidesData: SlideData[]): Promise<Blob> => {
         w: `${width}%`,
         h: `${height}%`,
         fontSize: refinedFontSize,
-        color: fontColor?.replace("#", "") || "333333",
+        color: (fontColor || "#333333").replace("#", ""),
         bold: isBold || false,
         align: (textAlign as any) || "left",
         valign: "top",
@@ -142,7 +134,6 @@ export const generatePptx = async (slidesData: SlideData[]): Promise<Blob> => {
         margin: 0,
         wrap: true,
         autoFit: false,
-        // The text box background matches the slide background to mask the original image underneath
         fill: { color: bgColorPptx }, 
         line: { color: bgColorPptx, transparency: 100 },
       });
