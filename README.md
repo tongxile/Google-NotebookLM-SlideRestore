@@ -8,7 +8,7 @@
 
 ## 解决方案：PDF转PPTX，重点关注：去notebookLM水印，同时大图片拆分，OCR文字识别放到透明文本框，有些是直接抠图，图片下标小文字单独提取
 
-## 打磨多次。凑合能用。。
+## 安服售前-AI辅助工具！
 
 # Run and deploy your AI Studio app
 
